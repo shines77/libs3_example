@@ -1,0 +1,2 @@
+RNG validity error: file ./test/relaxng/tutor10_2_3.xml line 1 element foo
+Expecting no namespace for element foo

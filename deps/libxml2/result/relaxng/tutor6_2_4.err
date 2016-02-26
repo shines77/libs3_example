@@ -1,0 +1,4 @@
+RNG validity error: file ./test/relaxng/tutor6_2_4.xml line 4 element text
+Error validating value 
+RNG validity error: file ./test/relaxng/tutor6_2_4.xml line 4 element text
+Element preferredFormat failed to validate content
