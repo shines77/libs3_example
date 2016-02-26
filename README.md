@@ -6,3 +6,6 @@ This directory contains the libs3 library.
 
 The libs3 library is free software.  See the file LICENSE for copying
 permission.
+
+# 说明
+VS项目文件在 {project_dir}\mswin\libs3_vc2015.sln
