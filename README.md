@@ -7,5 +7,5 @@ This directory contains the libs3 library.
 The libs3 library is free software.  See the file LICENSE for copying
 permission.
 
-# ËµÃ÷
-VSÏîÄ¿ÎÄ¼þÔÚ {project_dir}\mswin\libs3_vc2015.sln
+# è¯´æ˜Ž
+VSé¡¹ç›®æ–‡ä»¶åœ¨ {project_dir}\mswin\libs3_vc2015.sln
