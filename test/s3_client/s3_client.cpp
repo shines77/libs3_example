@@ -8,8 +8,10 @@
 
 #include "libs3.h"
 
-int main2(int argc, char * argv[])
+int main(int argc, char * argv[])
 {
     printf("S3 client!\n");
+
+    system("pause");
     return 0;
 }
