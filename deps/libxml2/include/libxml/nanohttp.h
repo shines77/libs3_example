@@ -9,7 +9,8 @@
 #ifndef __NANO_HTTP_H__
 #define __NANO_HTTP_H__
 
-#if (defined(WIN32) || defined(_WIN32)) && !defined(__CYGWIN__) && !defined(__MINGW32__)
+#if defined(_MSC_VER) || defined(_WIN32) || defined(WIN32) || defined(_WINDOWS) || defined(WINDOWS) \
+    || defined(__INTEL_COMPILER) || defined(__ICL) || defined(__MINGW__)
 #include <libxml/xmlwin32version.h>
 #else
 #include <libxml/xmlversion.h>

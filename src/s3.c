@@ -35,14 +35,18 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-//#include <strings.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <time.h>
-//#include <unistd.h>
 
+#if defined(_MSC_VER) || defined(_WIN32) || defined(WIN32) || defined(_WINDOWS) || defined(WINDOWS) \
+    || defined(__INTEL_COMPILER) || defined(__ICL) || defined(__MINGW__)
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#else
+#include <strings.h>
+#include <unistd.h>
+#endif
 
 #include "libs3.h"
 
