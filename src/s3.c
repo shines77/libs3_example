@@ -97,6 +97,7 @@ static int verifyPeerG = 0;
 
 static const char *accessKeyIdG = 0;
 static const char *secretAccessKeyG = 0;
+static const char *hostNameG = 0;
 
 
 // Request results, saved as globals -----------------------------------------
@@ -190,7 +191,11 @@ static char putenvBufG[256];
 static void S3_init()
 {
     S3Status status;
-    const char *hostname = getenv("S3_HOSTNAME");
+    const char *hostname;
+    if (hostNameG != NULL)
+        hostname = hostNameG;
+    else
+        hostname = getenv("S3_HOSTNAME");
     
     if ((status = S3_initialize("s3", verifyPeerG|S3_INIT_ALL, hostname))
         != S3StatusOK) {
@@ -768,8 +773,11 @@ static int should_retry()
 
 static struct option longOptionsG[] =
 {
+    { "access-key",           required_argument,  0,  'a' },
+    { "end-point",            required_argument,  0,  'e' },
     { "force",                no_argument,        0,  'f' },
     { "vhost-style",          no_argument,        0,  'h' },
+    { "secret-key",           required_argument,  0,  'k' },
     { "unencrypted",          no_argument,        0,  'u' },
     { "show-properties",      no_argument,        0,  's' },
     { "retries",              required_argument,  0,  'r' },
@@ -2817,7 +2825,7 @@ static void get_object(int argc, char **argv, int optindex)
         }
         else if (!strncmp(param, IF_NOT_MODIFIED_SINCE_PREFIX, 
                           IF_NOT_MODIFIED_SINCE_PREFIX_LEN)) {
-            // Parse ifModifiedSince
+            // Parse ifNotModifiedSince
             ifNotModifiedSince = parseIso8601Time
                 (&(param[IF_NOT_MODIFIED_SINCE_PREFIX_LEN]));
             if (ifNotModifiedSince < 0) {
@@ -3599,7 +3607,7 @@ int main(int argc, char **argv)
     // Parse args
     while (1) {
         int idx = 0;
-        int c = getopt_long(argc, argv, "vfhusr:", longOptionsG, &idx);
+        int c = getopt_long(argc, argv, "vfhusr:a:k:e:", longOptionsG, &idx);
 
         if (c == -1) {
             // End of options
@@ -3607,6 +3615,15 @@ int main(int argc, char **argv)
         }
 
         switch (c) {
+        case 'a':
+            accessKeyIdG = strdup(optarg);
+            break;
+        case 'k':
+            secretAccessKeyG = strdup(optarg);
+            break;
+        case 'e':
+            hostNameG = strdup(optarg);
+            break;
         case 'f':
             forceG = 1;
             break;
@@ -3653,14 +3670,17 @@ int main(int argc, char **argv)
         usageExit(stdout);
     }
 
-    accessKeyIdG = getenv("S3_ACCESS_KEY_ID");
+    if (accessKeyIdG == NULL)
+        accessKeyIdG = getenv("S3_ACCESS_KEY_ID");
     if (!accessKeyIdG) {
         fprintf(stderr, "Missing environment variable: S3_ACCESS_KEY_ID\n");
         return -1;
     }
-    secretAccessKeyG = getenv("S3_SECRET_ACCESS_KEY");
+
+    if (secretAccessKeyG == NULL)
+        secretAccessKeyG = getenv("S3_SECRET_ACCESS_KEY");
     if (!secretAccessKeyG) {
-        fprintf(stderr, 
+        fprintf(stderr,
                 "Missing environment variable: S3_SECRET_ACCESS_KEY\n");
         return -1;
     }

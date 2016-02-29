@@ -41,10 +41,6 @@
 #define USER_AGENT_SIZE 256
 #define REQUEST_STACK_SIZE 32
 
-#ifdef _MSC_VER
-#define gmtime_r    gmtime_s
-#endif
-
 static int verifyPeer;
 
 static char userAgentG[USER_AGENT_SIZE];
@@ -119,6 +115,13 @@ typedef struct RequestComputedValues
     char hostHeader[128];
 } RequestComputedValues;
 
+
+#ifdef _MSC_VER
+struct tm * gmtime_r(time_t const * const _Time, struct tm * const _Tm) {
+    gmtime_s(_Tm, _Time);
+    return _Tm;
+}
+#endif
 
 // Called whenever we detect that the request headers have been completely
 // processed; which happens either when we get our first read/write callback,

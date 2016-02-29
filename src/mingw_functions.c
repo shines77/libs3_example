@@ -118,6 +118,7 @@ int uname(struct utsname *u)
     }
 #else
     u->sysname = "Microsoft Windows 7";
+    u->machine = "";
 #endif
 
     return 0;
