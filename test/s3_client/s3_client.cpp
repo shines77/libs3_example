@@ -8,6 +8,7 @@
 #include <string>
 #include <thread>
 #include <mutex>
+#include <condition_variable>
 
 #include "libs3.h"
 
@@ -145,7 +146,7 @@ public:
         }
     }
 
-    void thread_detach()
+    void worker_thread_detach()
     {
         if (worker_thread_)
         {
@@ -176,11 +177,11 @@ public:
         db_ = new_db;
 
         // Create the worker thread
-        thread_detach();
+        worker_thread_detach();
         mutex_.unlock();
 
-        std::function<void()> func = std::bind(&list_object_summary_service_impl::worker_thread, this);
-        std::thread * new_thread = new std::thread(func);
+        std::function<void()> thread_func = std::bind(&list_object_summary_service_impl::worker_thread, this);
+        std::thread * new_thread = new std::thread(thread_func);
         if (!new_thread)
         {
             nosql_db_destroy();
@@ -200,7 +201,7 @@ public:
     bool uninit()
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        thread_detach();
+        worker_thread_detach();
         nosql_db_destroy();
         status_ = running_status::unknown;
         inited_ = false;
