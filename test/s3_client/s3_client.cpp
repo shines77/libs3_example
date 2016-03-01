@@ -5,10 +5,13 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <iostream>
+#include <atomic>
 #include <string>
 #include <thread>
 #include <mutex>
 #include <condition_variable>
+#include <chrono>
 
 #include "libs3.h"
 
