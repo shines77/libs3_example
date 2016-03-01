@@ -64,7 +64,7 @@ struct finish_callback_t {
 };
 
 struct list_finish_callback_t : public finish_callback_t {
-    void on_finished(int status) {
+    virtual void on_finished(int status) override {
         // TODO:
     }
 };
@@ -81,6 +81,19 @@ enum running_status {
     terminating,
     terminated
 };
+
+namespace System {
+
+void sleep(uint32_t time_ms)
+{
+#if defined(_WIN32) || defined(WIN32)
+    ::Sleep(time_ms);
+#else
+    ::Sleep(time_ms);
+#endif
+}
+
+}
 
 class list_object_summary_service
 {
@@ -100,7 +113,6 @@ class list_object_summary_service_impl {
 private:
     cluster_type_t cluster_type_;
     bool inited_;
-    bool alive_;
     int status_;
     std::thread * worker_thread_;
     rocksdb::DB * db_;
@@ -112,7 +124,7 @@ private:
 
 public:
     list_object_summary_service_impl() : cluster_type_(CLUSTER_TYPE_UNKNOWN), inited_(false),
-        alive_(false), status_(running_status::unknown), worker_thread_(nullptr), db_(nullptr),
+        status_(running_status::unknown), worker_thread_(nullptr), db_(nullptr),
         last_error_(0), mutex_(), suspend_cond_(), stop_cond_(), p_stop_cond_(nullptr)
     {
         //
@@ -214,14 +226,16 @@ public:
     {
         std::lock_guard<std::mutex> lock(mutex_);
         status_ = running_status::stopping;
+        printf("worker_thread stopping.\n");
         return 0;
     }
 
-    int stop(std::condition_variable & stop_cond, uint32_t timeout)
+    int stop(std::condition_variable & stop_cond, int32_t timeout = -1)
     {
         std::lock_guard<std::mutex> lock(mutex_);
         status_ = running_status::stopping;
         p_stop_cond_ = &stop_cond;
+        printf("worker_thread stopping.\n");
         return 0;
     }
 
@@ -230,10 +244,11 @@ public:
         std::unique_lock<std::mutex> lock(mutex_);
         stop_cond_.wait(lock);
         this->status_ = running_status::stopped;
+        printf("worker_thread stopped.\n");
         return 0;
     }
 
-    int wait_for(uint32_t timeout)
+    int wait_for(int32_t timeout = -1)
     {
         int status = -1;
         std::chrono::milliseconds timeout_ms = std::chrono::milliseconds(timeout);
@@ -245,13 +260,14 @@ public:
             else if (wait_status == std::cv_status::timeout)
                 status = static_cast<int>(std::cv_status::timeout);
             this->status_ = running_status::stopped;
+            printf("worker_thread stopped.\n");
         }
         return status;
     }
 
     int  suspend() { return 0; }
     int  resume() { return 0; }
-    int  terminate(uint32_t timeout) { return 0; }
+    int  terminate(int32_t timeout) { return 0; }
 
     bool set_backup_status(utils::backup_status & status) { return true; }
     utils::backup_status get_last_backup_status() const { return utils::backup_status(); }
@@ -289,40 +305,34 @@ protected:
 
                 lock.lock();
                 this->status_ = running_status::stopped;
-                //lock.unlock();
-                //break;
             }
             else if (this->status_ == running_status::stopping ||
                 this->status_ == running_status::terminating)
             {
+#if 1
                 stop_cond_.notify_one();
                 if (this->status_ == running_status::stopping)
                 {
-                    //this->status_ = running_status::stopped;
-                    printf("worker_thread stopped.\n");
+                    printf("worker_thread will be stopped.\n");
                 }
-                ///*
+#else                
                 if (p_stop_cond_)
                 {
                     p_stop_cond_->notify_one();
                     if (this->status_ == running_status::stopping)
                     {
                         //this->status_ = running_status::stopped;
-                        printf("worker_thread stopped22.\n");
+                        printf("worker_thread will be stopped22.\n");
                     }
                 }
-                //*/
+#endif
                 lock.unlock();
                 break;
             }
             else
             {
                 lock.unlock();
-#if defined(_WIN32) || defined(WIN32)
-                ::Sleep(1);
-#else
-                sleep(1);
-#endif
+                System::sleep(1);
                 lock.lock();
             }
         } while (true);
@@ -343,17 +353,12 @@ int main(int argc, char * argv[])
         utils::backup_status current_status;
         list_object_summary->set_backup_status(current_status);
 
-#if defined(_WIN32) || defined(WIN32)
-        ::Sleep(5000);
-#else
-        sleep(5000);
-#endif
+        System::sleep(5000);
+
         list_object_summary->start();
-#if defined(_WIN32) || defined(WIN32)
-        ::Sleep(5000);
-#else
-        sleep(5000);
-#endif
+
+        System::sleep(5000);
+
         list_object_summary->stop();
         list_object_summary->wait_for(10000);
 
