@@ -74,6 +74,7 @@ Icon?
 *.manifest
 *.intermediate.manifest
 *.bak
+*.bsc
 
 # Ignore folders create by Visual Studio 2015
 /.vs/
