@@ -10,7 +10,7 @@
 #ifndef __XML_XPATH_INTERNALS_H__
 #define __XML_XPATH_INTERNALS_H__
 
-#if defined(_MSC_VER) || defined(_WIN32) || defined(WIN32) || defined(_WINDOWS) || defined(WINDOWS) \
+#if defined(_WIN32) || defined(WIN32) || defined(_WINDOWS) || defined(WINDOWS) \
     || defined(__INTEL_COMPILER) || defined(__ICL) || defined(__MINGW__)
 #include <libxml/xmlwin32version.h>
 #else

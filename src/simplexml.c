@@ -80,7 +80,7 @@ static void saxStartElement(void *user_data, const xmlChar *nameUtf8,
     if (simpleXml->elementPathLen) {
         simpleXml->elementPath[simpleXml->elementPathLen++] = '/';
     }
-#if defined(_MSC_VER) || defined(_WIN32) || defined(WIN32) || defined(_WINDOWS) || defined(WINDOWS) \
+#if defined(_WIN32) || defined(WIN32) || defined(_WINDOWS) || defined(WINDOWS) \
     || defined(__INTEL_COMPILER) || defined(__ICL) || defined(__MINGW__)
     strncpy_s(&(simpleXml->elementPath[simpleXml->elementPathLen]), sizeof(simpleXml->elementPath) - 1, name, len);
 #else

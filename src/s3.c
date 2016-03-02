@@ -39,7 +39,7 @@
 #include <sys/types.h>
 #include <time.h>
 
-#if defined(_MSC_VER) || defined(_WIN32) || defined(WIN32) || defined(_WINDOWS) || defined(WINDOWS) \
+#if defined(_WIN32) || defined(WIN32) || defined(_WINDOWS) || defined(WINDOWS) \
     || defined(__INTEL_COMPILER) || defined(__ICL) || defined(__MINGW__)
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -756,7 +756,7 @@ static int should_retry()
     if (retriesG--) {
         // Sleep before next retry; start out with a 1 second sleep
         static int retrySleepInterval = 1 * SLEEP_UNITS_PER_SECOND;
-#if defined(_MSC_VER) || defined(_WIN32) || defined(WIN32) || defined(_WINDOWS) || defined(WINDOWS) \
+#if defined(_WIN32) || defined(WIN32) || defined(_WINDOWS) || defined(WINDOWS) \
     || defined(__INTEL_COMPILER) || defined(__ICL) || defined(__MINGW__)
         Sleep(retrySleepInterval);
 #else

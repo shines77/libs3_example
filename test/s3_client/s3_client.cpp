@@ -91,7 +91,9 @@ struct list_finish_callback_t : public finish_callback_t
     }
 };
 
-enum s3_work_error
+namespace s3 {
+
+enum error_code
 {
 	E_S3_WORK_FIRST = -200,
 	E_TIMEOUT,
@@ -101,12 +103,14 @@ enum s3_work_error
 	E_S3_WORK_LAST
 };
 
-enum s3_work_result
+enum work_result
 {
     SUCCESS,
     FAILURE,
     DONE
 };
+
+} // namespace s3
 
 enum running_status
 {
@@ -445,25 +449,25 @@ protected:
         status_ = running_status::terminated;
     }
 
-    s3_work_result do_s3_list_object_summary()
+    s3::work_result do_s3_list_object_summary()
     {
         printf("do_s3_list_object_summary() enter.\n");
         System::sleep(200);
-        return s3_work_result::SUCCESS;
+        return s3::work_result::SUCCESS;
     }
 
-    s3_work_result do_s3_work()
+    s3::work_result do_s3_work()
     {
         auto result = do_s3_list_object_summary();
-        if (result == s3_work_result::SUCCESS)
+        if (result == s3::work_result::SUCCESS)
         {
             // TODO: Record the work status
         }
-        else if (result == s3_work_result::DONE)
+        else if (result == s3::work_result::DONE)
         {
             // TODO: Call finish callback
         }
-        else if (result == s3_work_result::FAILURE)
+        else if (result == s3::work_result::FAILURE)
         {
             // Write the failure info to log
         }
@@ -485,7 +489,7 @@ protected:
                 lock.unlock();
 
                 // Do a s3 list object summary work.
-                s3_work_result result = do_s3_work();
+                s3::work_result result = do_s3_work();
 
                 lock.lock();
             }
