@@ -15,75 +15,28 @@
 
 #include "libs3.h"
 
-namespace rocksdb {
-class DB {
-public:
-    DB()  {}
-    ~DB() {}
-
-    void destroy() {};
-};
-}
-
-namespace utils {
-class condition {
-public:
-    condition()  {}
-    ~condition() {}
-};
-class backup_status {
-public:
-    backup_status()  {}
-    ~backup_status() {}
-};
-}
-
-struct s3_string_t {
-    uint32_t     length;
+struct s3_string_t
+{
+    uint32_t length;
     const char * data;
 };
 
-struct compact_object_summary_t {
+struct compact_object_summary_t
+{
+    struct s3_string_t bucket;
     struct s3_string_t key;
     struct s3_string_t eTag;
     uint64_t lastModified;
     uint64_t size;
 };
 
-struct object_summary_t {
+struct object_summary_t
+{
+    std::string bucket;
     std::string key;
     std::string eTag;
     uint64_t lastModified;
     uint64_t size;
-};
-
-enum cluster_type_t {
-    CLUSTER_TYPE_UNKNOWN,
-    CLUSTER_TYPE_ONLINE,
-    CLUSTER_TYPE_BACKUP
-};
-
-struct finish_callback_t {
-    virtual void on_finished(int status) = 0;
-};
-
-struct list_finish_callback_t : public finish_callback_t {
-    virtual void on_finished(int status) override {
-        // TODO:
-    }
-};
-
-enum running_status {
-    unknown,
-    initializing,
-    initialized,
-    startting,
-    startted,
-    running,
-    stopping,
-    stopped,
-    terminating,
-    terminated
 };
 
 namespace System {
@@ -97,6 +50,105 @@ void sleep(uint32_t time_ms)
 #endif
 }
 
+}
+
+namespace rocksdb {
+class DB
+{
+public:
+    DB()  {}
+    ~DB() {}
+
+    void destroy() {};
+};
+}
+
+namespace timax {
+
+enum cluster_type_t {
+    CLUSTER_TYPE_UNKNOWN,
+    CLUSTER_TYPE_ONLINE,
+    CLUSTER_TYPE_BACKUP
+};
+
+class backup_status
+{
+public:
+    backup_status()  {}
+    ~backup_status() {}
+};
+
+struct finish_callback_t
+{
+    virtual void on_finished(int status) = 0;
+};
+
+struct list_finish_callback_t : public finish_callback_t
+{
+    virtual void on_finished(int status) override
+    {
+        // TODO:
+    }
+};
+
+enum s3_work_error
+{
+	E_S3_WORK_FIRST = -200,
+	E_TIMEOUT,
+	E_NO_TIMEOUT,
+	E_MODULE_HAVE_NOT_INITIALIZED = -1,
+	E_SUCCESS = 0,
+	E_S3_WORK_LAST
+};
+
+enum s3_work_result
+{
+    SUCCESS,
+    FAILURE,
+    DONE
+};
+
+enum running_status
+{
+    unknown,
+    initializing,
+    initialized,
+    startting,
+    startted,
+    running,
+    stopping,
+    stopped,
+    terminating,
+    terminated
+};
+
+static const char * get_running_status_string(int status)
+{
+    switch (status)
+    {
+        case running_status::unknown:
+            return "unknown";
+        case running_status::initializing:
+            return "initializing";
+        case running_status::initialized:
+            return "initialized";
+        case running_status::startting:
+            return "startting";
+        case running_status::startted:
+            return "startted";
+        case running_status::running:
+            return "running";
+        case running_status::stopping:
+            return "stopping";
+        case running_status::stopped:
+            return "stopped";
+        case running_status::terminating:
+            return "terminating";
+        case running_status::terminated:
+            return "terminated";
+        default:
+            return "other status";
+    }
 }
 
 class list_object_summary_service
@@ -139,6 +191,12 @@ public:
         this->uninit();
     }
 
+    bool is_inited() const { return inited_; }
+    bool is_alive() const { return (worker_thread_ != nullptr); }
+    bool is_running() const { return (status_ == running_status::running); }
+
+    std::mutex & get_mutex() const { return *(const_cast<std::mutex *>(&mutex_)); }
+
     void nosql_db_destroy()
     {
         if (db_)
@@ -173,7 +231,9 @@ public:
         rocksdb::DB * new_db = new rocksdb::DB();
         if (!new_db)
         {
+            mutex_.lock();
             set_last_error(-1);
+            mutex_.unlock();
             return false;
         }
         mutex_.lock();
@@ -187,8 +247,10 @@ public:
         std::thread * new_thread = new std::thread(thread_func);
         if (!new_thread)
         {
+            mutex_.lock();
             nosql_db_destroy();
             set_last_error(-1);
+            mutex_.unlock();
             return false;
         }
 
@@ -203,78 +265,55 @@ public:
 
     bool uninit()
     {
-        std::lock_guard<std::mutex> lock(mutex_);
-        worker_thread_detach();
-        nosql_db_destroy();
-        status_ = running_status::unknown;
-        inited_ = false;
+        static const int32_t wait_for_ms = 30000;
+        std::unique_lock<std::mutex> lock(mutex_);
+        _stop();
+        _wait_for(lock, wait_for_ms);
+        _destroy();
         return true;
     }
-
-    bool is_inited() const { return inited_; }
-    bool is_alive() const { return (worker_thread_ != nullptr); }
-    bool is_running() const { return (status_ == running_status::running); }
-
-    std::mutex & get_mutex() const { return *(const_cast<std::mutex *>(&mutex_)); }
 
     int start()
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        status_ = running_status::startting;
-        suspend_cond_.notify_one();
-        status_ = running_status::startted;
-        return 0;
+        return _start();
     }
 
     int stop()
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        status_ = running_status::stopping;
-        printf("worker_thread stopping.\n");
-        return 0;
+        return _stop();
     }
 
     int stop(std::condition_variable & stop_cond, int32_t timeout = -1)
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        status_ = running_status::stopping;
-        p_stop_cond_ = &stop_cond;
-        printf("worker_thread stopping.\n");
-        return 0;
+        return _stop(stop_cond, timeout);
     }
 
     int wait()
     {
         std::unique_lock<std::mutex> lock(mutex_);
-        stop_cond_.wait(lock);
-        this->status_ = running_status::stopped;
-        printf("worker_thread stopped.\n");
-        return 0;
+        return _wait(lock);
     }
 
     int wait_for(int32_t timeout = -1)
     {
-        int status = -1;
-        std::chrono::milliseconds timeout_ms = std::chrono::milliseconds(timeout);
-        {
-            std::unique_lock<std::mutex> lock(mutex_);
-            std::cv_status wait_status = stop_cond_.wait_for(lock, timeout_ms);
-            if (wait_status == std::cv_status::no_timeout)
-                status = static_cast<int>(std::cv_status::no_timeout);
-            else if (wait_status == std::cv_status::timeout)
-                status = static_cast<int>(std::cv_status::timeout);
-            this->status_ = running_status::stopped;
-            printf("worker_thread stopped.\n");
-        }
-        return status;
+        std::unique_lock<std::mutex> lock(mutex_);
+        return _wait_for(lock, timeout);
     }
 
-    int  suspend() { return 0; }
-    int  resume() { return 0; }
-    int  terminate(int32_t timeout) { return 0; }
+    int terminate(int32_t timeout = 0)
+    {
+        std::unique_lock<std::mutex> lock(mutex_);
+        return _terminate(timeout);
+    }
 
-    bool set_backup_status(utils::backup_status & status) { return true; }
-    utils::backup_status get_last_backup_status() const { return utils::backup_status(); }
+    int suspend() { return 0; }
+    int resume() { return 0; }
+
+    bool set_backup_status(backup_status & status) { return true; }
+    backup_status get_last_backup_status() const { return backup_status(); }
 
     int get_last_error() const { return last_error_; }
     void set_last_error(int error) { last_error_ = error; }
@@ -290,6 +329,147 @@ public:
 protected:
     void set_running_status(int status) { status_ = status; }
 
+    void _destroy()
+    {
+        worker_thread_detach();
+        nosql_db_destroy();
+        status_ = running_status::unknown;
+        inited_ = false;
+    }
+
+    void destroy()
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        _destroy();
+    }
+
+    int _start()
+    {
+        if (is_inited() && is_alive())
+        {
+            if (status_ != running_status::startted && status_ != running_status::running)
+            {
+                status_ = running_status::startting;
+                suspend_cond_.notify_one();
+                status_ = running_status::startted;
+            }
+            return 0;
+        }
+        return -1;
+    }
+
+    int _stop()
+    {
+        if (!is_inited())
+            return -1;
+
+        if (status_ == running_status::startted || status_ == running_status::running)
+        {
+            status_ = running_status::stopping;
+            printf("worker_thread stopping.\n");
+        }
+        else
+        {
+            printf("worker_thread _stop(): running_status = %s.\n", get_running_status_string(status_));
+        }
+        return 0;
+    }
+
+    int _stop(std::condition_variable & stop_cond, int32_t timeout = -1)
+    {
+        if (!is_inited())
+            return -1;
+
+        if (status_ == running_status::startted || status_ == running_status::running)
+        {
+            status_ = running_status::stopping;
+            p_stop_cond_ = &stop_cond;
+            printf("worker_thread stopping.\n");
+        }
+        else
+        {
+            printf("worker_thread _stop2(): running_status = %s.\n", get_running_status_string(status_));
+        }
+        return 0;
+    }
+
+    int _wait(std::unique_lock<std::mutex> & lock)
+    {
+        if (!is_inited())
+            return -1;
+
+        if (status_ == running_status::stopping || status_ == running_status::terminating)
+        {
+            stop_cond_.wait(lock);
+            status_ = running_status::stopped;
+            printf("worker_thread stopped.\n");
+        }
+        else
+        {
+            printf("worker_thread _wait(): running_status = %s.\n", get_running_status_string(status_));
+        }
+        return 0;
+    }
+
+    int _wait_for(std::unique_lock<std::mutex> & lock, int32_t timeout)
+    {
+        if (!is_inited())
+            return -1;
+
+        int wait_status = -2;
+        if (status_ == running_status::stopping || status_ == running_status::terminating)
+        {
+            std::chrono::milliseconds timeout_ms = std::chrono::milliseconds(timeout);
+            std::cv_status cond_status = stop_cond_.wait_for(lock, timeout_ms);
+            if (cond_status == std::cv_status::no_timeout)
+                wait_status = static_cast<int>(std::cv_status::no_timeout);
+            else if (cond_status == std::cv_status::timeout)
+                wait_status = static_cast<int>(std::cv_status::timeout);
+            status_ = running_status::stopped;
+            printf("worker_thread stopped.\n");
+        }
+        else
+        {
+            printf("worker_thread _wait_for(): running_status = %s.\n", get_running_status_string(status_));
+        }
+        return wait_status;
+    }
+
+    int _terminate(int32_t timeout = 0)
+    {
+        status_ = running_status::terminating;
+
+        worker_thread_detach();
+        nosql_db_destroy();
+
+        status_ = running_status::terminated;
+    }
+
+    s3_work_result do_s3_list_object_summary()
+    {
+        printf("do_s3_list_object_summary() enter.\n");
+        System::sleep(200);
+        return s3_work_result::SUCCESS;
+    }
+
+    s3_work_result do_s3_work()
+    {
+        auto result = do_s3_list_object_summary();
+        if (result == s3_work_result::SUCCESS)
+        {
+            // TODO: Record the work status
+        }
+        else if (result == s3_work_result::DONE)
+        {
+            // TODO: Call finish callback
+        }
+        else if (result == s3_work_result::FAILURE)
+        {
+            // Write the failure info to log
+        }
+        return result;
+    }
+
     void worker_thread()
     {
         printf("worker_thread enter.\n");
@@ -298,24 +478,22 @@ protected:
         printf("worker_thread start.\n");
         do
         {
-            if (this->status_ == running_status::startted
-                || this->status_ == running_status::running)
+            if (status_ == running_status::startted || status_ == running_status::running)
             {
-                this->status_ = running_status::running;
+                status_ = running_status::running;
                 printf("worker_thread running.\n");
                 lock.unlock();
 
-                // TODO: do some works.
+                // Do a s3 list object summary work.
+                s3_work_result result = do_s3_work();
 
                 lock.lock();
-                this->status_ = running_status::stopped;
             }
-            else if (this->status_ == running_status::stopping ||
-                this->status_ == running_status::terminating)
+            else if (status_ == running_status::stopping || status_ == running_status::terminating)
             {
 #if 1
                 stop_cond_.notify_one();
-                if (this->status_ == running_status::stopping)
+                if (status_ == running_status::stopping)
                 {
                     printf("worker_thread will be stopped.\n");
                 }
@@ -323,9 +501,9 @@ protected:
                 if (p_stop_cond_)
                 {
                     p_stop_cond_->notify_one();
-                    if (this->status_ == running_status::stopping)
+                    if (status_ == running_status::stopping)
                     {
-                        //this->status_ = running_status::stopped;
+                        //status_ = running_status::stopped;
                         printf("worker_thread will be stopped22.\n");
                     }
                 }
@@ -340,10 +518,20 @@ protected:
                 lock.lock();
             }
         } while (true);
-        this->status_ = running_status::unknown;
+
+        lock.lock();
+        status_ = running_status::unknown;
+        lock.unlock();
         printf("worker_thread over.\n");
     }
+
+private:
+    //
 };
+
+} // namespace timax
+
+using namespace timax;
 
 int main(int argc, char * argv[])
 {
@@ -354,7 +542,7 @@ int main(int argc, char * argv[])
     if (list_object_summary)
     {
         list_object_summary->init(CLUSTER_TYPE_ONLINE, finish_callback);
-        utils::backup_status current_status;
+        timax::backup_status current_status;
         list_object_summary->set_backup_status(current_status);
 
         System::sleep(5000);
